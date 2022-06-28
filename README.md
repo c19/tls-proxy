@@ -1,4 +1,8 @@
+## Data Flow
 
+Client -> (tls(socks(origin request. host may be domain))) -> Server
+Server -> origin request, resolve dns -> send origin request.
+Server with response -> (tls(socks(origin response))) -> Client
 
 ## self signed cert
 > https://devopscube.com/create-self-signed-certificates-openssl/
