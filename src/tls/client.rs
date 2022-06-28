@@ -2,27 +2,25 @@ use std::process;
 use std::sync::{Arc, Mutex};
 
 use mio::net::TcpStream;
+use serde::Deserialize;
 
 use std::collections;
-use std::convert::TryInto;
+
 use std::fs;
 use std::io;
 use std::io::{BufReader, Read, Write};
 use std::net::SocketAddr;
 use std::str;
 
-#[macro_use]
-extern crate serde_derive;
 
-use docopt::Docopt;
 
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
-const CLIENT: mio::Token = mio::Token(0);
+pub const CLIENT: mio::Token = mio::Token(0);
 
 /// This encapsulates the TCP-level connection, some connection
 /// state, and the underlying TLS-level session.
-struct TlsClient {
+pub struct TlsClient {
     socket: TcpStream,
     closing: bool,
     clean_closure: bool,
@@ -30,7 +28,7 @@ struct TlsClient {
 }
 
 impl TlsClient {
-    fn new(
+    pub fn new(
         sock: TcpStream,
         server_name: rustls::ServerName,
         cfg: Arc<rustls::ClientConfig>,
@@ -44,7 +42,7 @@ impl TlsClient {
     }
 
     /// Handles events sent to the TlsClient by mio::Poll
-    fn ready(&mut self, ev: &mio::event::Event) {
+    pub fn ready(&mut self, ev: &mio::event::Event) {
         assert_eq!(ev.token(), CLIENT);
 
         if ev.is_readable() {
@@ -61,7 +59,7 @@ impl TlsClient {
         }
     }
 
-    fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+    pub fn read_source_to_end(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
         self.tls_conn
@@ -139,7 +137,7 @@ impl TlsClient {
     }
 
     /// Registers self as a 'listener' in mio::Registry
-    fn register(&mut self, registry: &mio::Registry) {
+    pub fn register(&mut self, registry: &mio::Registry) {
         let interest = self.event_set();
         registry
             .register(&mut self.socket, CLIENT, interest)
@@ -147,7 +145,7 @@ impl TlsClient {
     }
 
     /// Reregisters self as a 'listener' in mio::Registry.
-    fn reregister(&mut self, registry: &mio::Registry) {
+    pub fn reregister(&mut self, registry: &mio::Registry) {
         let interest = self.event_set();
         registry
             .reregister(&mut self.socket, CLIENT, interest)
@@ -281,7 +279,7 @@ impl rustls::client::StoresClientSessions for PersistCache {
     }
 }
 
-const USAGE: &str = "
+pub const USAGE: &str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
 before making the connection.  --http replaces this with a
@@ -320,27 +318,27 @@ Options:
 
 #[derive(Debug, Deserialize)]
 pub struct Args {
-    flag_port: Option<u16>,
-    flag_http: bool,
-    flag_verbose: bool,
-    flag_protover: Vec<String>,
-    flag_suite: Vec<String>,
-    flag_proto: Vec<String>,
-    flag_max_frag_size: Option<usize>,
-    flag_cafile: Option<String>,
-    flag_cache: Option<String>,
-    flag_no_tickets: bool,
-    flag_no_sni: bool,
-    flag_insecure: bool,
-    flag_auth_key: Option<String>,
-    flag_auth_certs: Option<String>,
-    arg_hostname: String,
+    pub flag_port: Option<u16>,
+    pub flag_http: bool,
+    pub flag_verbose: bool,
+    pub flag_protover: Vec<String>,
+    pub flag_suite: Vec<String>,
+    pub flag_proto: Vec<String>,
+    pub flag_max_frag_size: Option<usize>,
+    pub flag_cafile: Option<String>,
+    pub flag_cache: Option<String>,
+    pub flag_no_tickets: bool,
+    pub flag_no_sni: bool,
+    pub flag_insecure: bool,
+    pub flag_auth_key: Option<String>,
+    pub flag_auth_certs: Option<String>,
+    pub arg_hostname: String,
 }
 
 // TODO: um, well, it turns out that openssl s_client/s_server
 // that we use for testing doesn't do ipv6.  So we can't actually
 // test ipv6 and hence kill this.
-fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
+pub fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
     use std::net::ToSocketAddrs;
 
     let addrs = (host, port).to_socket_addrs().unwrap();
@@ -544,64 +542,4 @@ pub fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     apply_dangerous_options(args, &mut config);
 
     Arc::new(config)
-}
-
-/// Parse some arguments, then make a TLS client connection
-/// somewhere.
-fn main() {
-    let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
-
-    let args: Args = Docopt::new(USAGE)
-        .map(|d| d.help(true))
-        .map(|d| d.version(Some(version)))
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
-
-    if args.flag_verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
-            .init();
-    }
-
-    let port = args.flag_port.unwrap_or(443);
-    let addr = lookup_ipv4(args.arg_hostname.as_str(), port);
-
-    let config = make_config(&args);
-
-    let sock = TcpStream::connect(addr).unwrap();
-    let server_name = args
-        .arg_hostname
-        .as_str()
-        .try_into()
-        .expect("invalid DNS name");
-    let mut tlsclient = TlsClient::new(sock, server_name, config);
-
-    if args.flag_http {
-        let httpreq = format!(
-            "GET / HTTP/1.0\r\nHost: {}\r\nConnection: \
-                               close\r\nAccept-Encoding: identity\r\n\r\n",
-            args.arg_hostname
-        );
-        tlsclient
-            .write_all(httpreq.as_bytes())
-            .unwrap();
-    } else {
-        let mut stdin = io::stdin();
-        tlsclient
-            .read_source_to_end(&mut stdin)
-            .unwrap();
-    }
-
-    let mut poll = mio::Poll::new().unwrap();
-    let mut events = mio::Events::with_capacity(32);
-    tlsclient.register(poll.registry());
-
-    loop {
-        poll.poll(&mut events, None).unwrap();
-
-        for ev in events.iter() {
-            tlsclient.ready(ev);
-            tlsclient.reregister(poll.registry());
-        }
-    }
 }
