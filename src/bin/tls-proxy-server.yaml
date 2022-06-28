@@ -1,0 +1,16 @@
+---
+cmd_echo: false
+cmd_http: false
+flag_port: 443
+flag_verbose: false
+flag_protover: []
+flag_suite: []
+flag_proto: []
+flag_certs: certs/server.crt
+flag_key: certs/server.key
+flag_ocsp: ~
+flag_auth: ~
+flag_require_auth: false
+flag_resumption: false
+flag_tickets: false
+arg_fport: 1080

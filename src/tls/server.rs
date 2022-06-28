@@ -4,6 +4,7 @@ use log::debug;
 use log::error;
 use mio::net::{TcpListener, TcpStream};
 use serde::Deserialize;
+use serde::Serialize;
 
 use std::collections::HashMap;
 use std::fs;

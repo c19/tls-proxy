@@ -5,21 +5,14 @@ use tls_proxy::tls::server::{LISTENER, ServerMode, TlsServer, Args, USAGE, make_
 #[macro_use]
 extern crate log;
 
-use std::net;
+use std::{net, fs};
 
 #[macro_use]
 extern crate serde_derive;
 
-use docopt::Docopt;
-
 fn main() {
-    let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
-
-    let args: Args = Docopt::new(USAGE)
-        .map(|d| d.help(true))
-        .map(|d| d.version(Some(version)))
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
+    let yaml_raw = fs::read_to_string("src/bin/tls-proxy-server.yaml").expect("Unable to read file: src/bin/tls-proxy-server.yaml");
+    let args: Args = serde_yaml::from_str(&yaml_raw).expect("unable to deserialize config yaml");
 
     if args.flag_verbose {
         env_logger::Builder::new()
