@@ -1,25 +1,21 @@
+
 use mio::net::TcpStream;
-use tls_proxy::tls::client::{USAGE, Args, lookup_ipv4, make_config, TlsClient};
+use tls_proxy::tls::client::{Args as TlsArgs, lookup_ipv4, make_config, TlsClient};
+use fast_socks5::server::{Config as SocksArgs};
 use std::convert::TryInto;
-use std::io;
+use std::{io, fs};
 use std::io::{Write};
 
 #[macro_use]
 extern crate serde_derive;
 
-use docopt::Docopt;
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub tls: TlsArgs,
+    pub socks5: SocksArgs,
+}
 
-/// Parse some arguments, then make a TLS client connection
-/// somewhere.
-fn main() {
-    let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
-
-    let args: Args = Docopt::new(USAGE)
-        .map(|d| d.help(true))
-        .map(|d| d.version(Some(version)))
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
-
+fn run_tls_client(args: TlsArgs){
     if args.flag_verbose {
         env_logger::Builder::new()
             .parse_filters("trace")
@@ -67,4 +63,12 @@ fn main() {
             tlsclient.reregister(poll.registry());
         }
     }
+}
+
+// Opens a socks server, and send the socks packet through a tls proxy.
+fn main() {
+    let yaml_raw = fs::read_to_string("src/bin/tls-proxy-client.yaml").expect("Unable to read file: src/bin/tls-proxy-client.yaml");
+    let args: Config = serde_yaml::from_str(&yaml_raw).expect("unable to deserialize config yaml");
+
+    run_tls_client(args.tls);
 }

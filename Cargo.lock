@@ -152,11 +152,12 @@ dependencies = [
 [[package]]
 name = "fast-socks5"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25bef00d863e757b64a737857143b5425061271a4149ff5d81201fb4c9bfc01c"
 dependencies = [
  "anyhow",
  "log",
+ "serde",
+ "serde_derive",
+ "serde_yaml",
  "thiserror",
  "tokio",
  "tokio-stream",

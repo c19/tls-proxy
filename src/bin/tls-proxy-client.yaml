@@ -1,0 +1,22 @@
+tls:
+  flag_port: 443
+  flag_http: true
+  flag_verbose: false
+  flag_protover: []
+  flag_suite: []
+  flag_proto: []
+  flag_max_frag_size: ~
+  flag_cafile: ~
+  flag_cache: ~
+  flag_no_tickets: false
+  flag_no_sni: false
+  flag_insecure: false
+  flag_auth_key: ~
+  flag_auth_certs: ~
+  arg_hostname: expired.badssl.com
+socks5:
+  request_timeout: 10
+  skip_auth: true
+  dns_resolve: true
+  execute_command: true
+  allow_udp: true

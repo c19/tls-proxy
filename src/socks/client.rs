@@ -68,6 +68,9 @@ pub async fn spawn_socks_server() -> Result<()> {
         }
     }
 
+    let s = serde_yaml::to_string(&config).unwrap();
+    dbg!(s);
+
     let config = Arc::new(config);
 
     let listener = TcpListener::bind(&opt.listen_addr).await?;

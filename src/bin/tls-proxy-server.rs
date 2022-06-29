@@ -1,6 +1,7 @@
 use mio::net::{TcpListener};
 extern crate tls_proxy;
-use tls_proxy::tls::server::{LISTENER, ServerMode, TlsServer, Args, USAGE, make_config};
+use tls_proxy::tls::server::{LISTENER, ServerMode, TlsServer, Args as TlsArgs, make_config};
+use fast_socks5::server::{Config as SocksArgs};
 
 #[macro_use]
 extern crate log;
@@ -10,10 +11,13 @@ use std::{net, fs};
 #[macro_use]
 extern crate serde_derive;
 
-fn main() {
-    let yaml_raw = fs::read_to_string("src/bin/tls-proxy-server.yaml").expect("Unable to read file: src/bin/tls-proxy-server.yaml");
-    let args: Args = serde_yaml::from_str(&yaml_raw).expect("unable to deserialize config yaml");
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub tls: TlsArgs,
+    pub socks5: SocksArgs,
+}
 
+fn run_tls_server(args: TlsArgs){
     if args.flag_verbose {
         env_logger::Builder::new()
             .parse_filters("trace")
@@ -56,4 +60,11 @@ fn main() {
             }
         }
     }
+}
+
+fn main() {
+    let yaml_raw = fs::read_to_string("src/bin/tls-proxy-server.yaml").expect("Unable to read file: src/bin/tls-proxy-server.yaml");
+    let args: Config = serde_yaml::from_str(&yaml_raw).expect("unable to deserialize config yaml");
+
+    run_tls_server(args.tls);
 }

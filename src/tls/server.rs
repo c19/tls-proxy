@@ -442,7 +442,7 @@ Options:
     --help, -h          Show this screen.
 ";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Args {
     pub cmd_echo: bool,
     pub cmd_http: bool,

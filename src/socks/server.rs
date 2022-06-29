@@ -61,6 +61,9 @@ pub async fn spawn_socks_server() -> Result<()> {
     config.set_request_timeout(opt.request_timeout);
     config.set_skip_auth(opt.skip_auth);
 
+    let s = serde_yaml::to_string(&config).unwrap();
+    dbg!(s);
+
     match opt.auth {
         AuthMode::NoAuth => warn!("No authentication has been set!"),
         AuthMode::Password { username, password } => {

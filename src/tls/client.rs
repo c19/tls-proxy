@@ -2,7 +2,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 
 use mio::net::TcpStream;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use std::collections;
 
@@ -316,7 +316,7 @@ Options:
     --help, -h          Show this screen.
 ";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Args {
     pub flag_port: Option<u16>,
     pub flag_http: bool,
