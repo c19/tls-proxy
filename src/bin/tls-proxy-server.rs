@@ -1,15 +1,42 @@
-use mio::net::{TcpListener};
 extern crate tls_proxy;
-use tls_proxy::tls::server::{LISTENER, ServerMode, TlsServer, Args as TlsArgs, make_config};
 use fast_socks5::server::{Config as SocksArgs};
+use std::{fs};
 
+use rustls_pemfile::{certs, rsa_private_keys};
+use std::fs::File;
+use std::io::{self, BufReader};
+use std::net::ToSocketAddrs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::io::{copy, sink, split, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio_rustls::rustls::{self, Certificate, PrivateKey};
+use tokio_rustls::TlsAcceptor;
 #[macro_use]
 extern crate log;
 
-use std::{net, fs};
-
 #[macro_use]
 extern crate serde_derive;
+/// Tokio Rustls server example
+#[derive(Serialize, Deserialize)]
+pub struct TlsArgs {
+    pub addr: String,
+    pub cert: PathBuf,
+    pub key: PathBuf,
+    pub echo_mode: bool,
+}
+
+fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
+    certs(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid cert"))
+        .map(|mut certs| certs.drain(..).map(Certificate).collect())
+}
+
+fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
+    rsa_private_keys(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid key"))
+        .map(|mut keys| keys.drain(..).map(PrivateKey).collect())
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -17,54 +44,62 @@ pub struct Config {
     pub socks5: SocksArgs,
 }
 
-fn run_tls_server(args: TlsArgs){
-    if args.flag_verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
-            .init();
-    }
+async fn run_tls_server(args: TlsArgs){
+    let addr = args
+        .addr
+        .to_socket_addrs().unwrap()
+        .next()
+        .ok_or_else(|| io::Error::from(io::ErrorKind::AddrNotAvailable)).unwrap();
+    let certs = load_certs(&args.cert).unwrap();
+    let mut keys = load_keys(&args.key).unwrap();
 
-    let mut addr: net::SocketAddr = "0.0.0.0:443".parse().unwrap();
-    addr.set_port(args.flag_port.unwrap_or(443));
+    let config = rustls::ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(certs, keys.remove(0))
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err)).unwrap();
+    let acceptor = TlsAcceptor::from(Arc::new(config));
 
-    let config = make_config(&args);
+    let listener = TcpListener::bind(addr).await.unwrap();
 
-    let mut listener = TcpListener::bind(addr).expect("cannot listen on port");
-    let mut poll = mio::Poll::new().unwrap();
-    poll.registry()
-        .register(&mut listener, LISTENER, mio::Interest::READABLE)
-        .unwrap();
-
-    let mode = if args.cmd_echo {
-        ServerMode::Echo
-    } else if args.cmd_http {
-        ServerMode::Http
-    } else {
-        ServerMode::Forward(args.arg_fport.expect("fport required"))
-    };
-
-    let mut tlsserv = TlsServer::new(listener, mode, config);
-
-    let mut events = mio::Events::with_capacity(256);
     loop {
-        poll.poll(&mut events, None).unwrap();
+        let (stream, peer_addr) = listener.accept().await.unwrap();
+        let acceptor = acceptor.clone();
 
-        for event in events.iter() {
-            match event.token() {
-                LISTENER => {
-                    tlsserv
-                        .accept(poll.registry())
-                        .expect("error accepting socket");
-                }
-                _ => tlsserv.conn_event(poll.registry(), event),
+        let fut = async move {
+            let mut stream = acceptor.accept(stream).await?;
+            // pass tls stream to socks stream
+
+            let mut output = sink();
+            stream
+                .write_all(
+                    &b"HTTP/1.0 200 ok\r\n\
+                Connection: close\r\n\
+                Content-length: 12\r\n\
+                \r\n\
+                Hello world!"[..],
+                )
+                .await?;
+            stream.shutdown().await?;
+            copy(&mut stream, &mut output).await?;
+            println!("Hello: {}", peer_addr);
+
+            Ok(()) as io::Result<()>
+        };
+
+        tokio::spawn(async move {
+            if let Err(err) = fut.await {
+                eprintln!("{:?}", err);
             }
-        }
+        });
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let yaml_raw = fs::read_to_string("src/bin/tls-proxy-server.yaml").expect("Unable to read file: src/bin/tls-proxy-server.yaml");
     let args: Config = serde_yaml::from_str(&yaml_raw).expect("unable to deserialize config yaml");
 
-    run_tls_server(args.tls);
+    run_tls_server(args.tls).await;
+    Ok(())
 }

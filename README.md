@@ -16,7 +16,7 @@ openssl req -x509 \
             -sha256 -days 356 \
             -nodes \
             -newkey rsa:2048 \
-            -subj "/CN=demo.self-signed.com/C=US/L=San Fransisco" \
+            -subj "/CN=demo.tls-proxy.com/C=US/L=San Fransisco" \
             -keyout rootCA.key -out rootCA.crt
 
 openssl genrsa -out server.key 2048
